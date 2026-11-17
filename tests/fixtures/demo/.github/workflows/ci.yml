@@ -1,0 +1,7 @@
+name: ci
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgres://localhost/db
+      LOG_LEVEL: info

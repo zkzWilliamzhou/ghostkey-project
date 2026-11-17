@@ -1,0 +1,8 @@
+{
+  "case": "sarif",
+  "exit_code": 1,
+  "files_created": [],
+  "stderr_exact": "",
+  "stdout_bytes": 7646,
+  "stdout_sha256": "45369bcd027da279f6445c408b05d7e03db180c129c3d723e98868d6fc2ce574"
+}

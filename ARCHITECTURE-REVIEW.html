@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ghostkey architecture review</title>
+<style>
+  :root { --ink:#12181f; --muted:#5b6875; --line:#dde3e9; --bg:#f6f8fa; --card:#fff; --accent:#0b6e4f; --warn:#a1531b; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; }
+  main { max-width:1080px; margin:0 auto; padding:48px 24px 80px; }
+  h1 { font-size:34px; margin:0 0 6px; letter-spacing:-0.02em; }
+  h2 { font-size:22px; margin:40px 0 14px; letter-spacing:-0.01em; }
+  h3 { font-size:18px; margin:0 0 10px; }
+  p { margin:0 0 12px; }
+  .lede { color:var(--muted); font-size:18px; max-width:760px; }
+  .stats { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin:28px 0 8px; }
+  .stat { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px; }
+  .stat b { display:block; font-size:26px; letter-spacing:-0.02em; }
+  .stat span { color:var(--muted); font-size:13px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:24px; margin:18px 0; }
+  .badge { display:inline-block; font-size:12px; font-weight:600; padding:3px 9px; border-radius:999px; background:#e3f3ec; color:var(--accent); }
+  .badge.spec { background:#fbeedc; color:var(--warn); }
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:14px; }
+  .panel { border:1px solid var(--line); border-radius:10px; padding:14px; background:#fbfcfd; }
+  .panel h4 { margin:0 0 10px; font-size:13px; text-transform:uppercase; letter-spacing:0.08em; color:var(--muted); }
+  svg { width:100%; height:auto; display:block; }
+  .labels { display:flex; flex-wrap:wrap; gap:6px; margin:10px 0 0; }
+  .labels span { font:12px ui-monospace,SFMono-Regular,Menlo,monospace; background:#eef2f6; border-radius:5px; padding:2px 6px; }
+  dl { margin:12px 0 0; display:grid; grid-template-columns:140px 1fr; gap:6px 14px; }
+  dt { font-weight:600; color:var(--muted); }
+  dd { margin:0; }
+  table { border-collapse:collapse; width:100%; margin-top:12px; font-size:14px; }
+  th,td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--line); }
+  th { color:var(--muted); font-weight:600; }
+  code { font:13px ui-monospace,SFMono-Regular,Menlo,monospace; background:#eef2f6; padding:1px 4px; border-radius:4px; }
+  .note { border-left:3px solid var(--accent); padding:10px 14px; background:#f0f8f4; margin:16px 0; font-size:14px; }
+  .callout { border-left:3px solid var(--warn); padding:10px 14px; background:#fdf6ec; margin:16px 0; font-size:14px; }
+  footer { margin-top:50px; color:var(--muted); font-size:13px; }
+  @media (max-width:760px) { .stats,.grid { grid-template-columns:1fr 1fr; } dl { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>ghostkey architecture review</h1>
+  <p class="lede">One shallow module became six deep modules behind a frozen interface. No function changed. The golden suite compares six report byte streams before and after, and all six match.</p>
+
+  <div class="stats">
+    <div class="stat"><b>685</b><span>lines in v1 core.py</span></div>
+    <div class="stat"><b>7</b><span>modules after deepening</span></div>
+    <div class="stat"><b>6/6</b><span>golden cases byte-identical</span></div>
+    <div class="stat"><b>44/44</b><span>tests passing after refactor</span></div>
+  </div>
+
+  <h2>Implemented candidate</h2>
+  <div class="card">
+    <span class="badge">Strong &middot; implemented</span>
+    <h3 style="margin-top:12px">Put the four responsibilities behind real seams</h3>
+    <dl>
+      <dt>Files</dt><dd><code>ghostkey/core.py</code> &rarr; <code>model.py</code>, <code>keys.py</code>, <code>walk.py</code>, <code>surfaces.py</code>, <code>analyze.py</code>, <code>render.py</code>, <code>scan.py</code></dd>
+      <dt>Problem</dt><dd>Every reader of <code>core.py</code> had to hold the filesystem trust boundary, seven surface parsers, the key join and three serializers in one head. A change to TOML parsing sat next to SARIF output. Locality was zero. Tests reached past the interface into private helpers because nothing else existed.</dd>
+      <dt>Solution</dt><dd>Move each responsibility verbatim into its own module with an <code>ast</code>-based splitter. <code>core.py</code> becomes a facade that re-exports the frozen names. <code>scan.run(options)</code> is the composition root. Callers and tests still cross the same seam.</dd>
+      <dt>Benefits</dt><dd>Locality: a YAML fix now lands in <code>surfaces.py</code> alone. Leverage: one <code>render(result, options)</code> interface serves three adapters (text, JSON, SARIF), so two adapters make the renderer seam real. Depth: each module hides a large implementation behind two or three functions.</dd>
+    </dl>
+
+    <div class="grid">
+      <div class="panel">
+        <h4>Before</h4>
+        <svg viewBox="0 0 420 230" role="img" aria-label="One module containing everything">
+          <rect x="10" y="10" width="400" height="210" rx="12" fill="#fdf1e8" stroke="#d9bfa5"/>
+          <text x="24" y="34" font-size="13" font-family="ui-monospace,monospace">core.py &middot; 685 lines</text>
+          <rect x="24" y="48" width="372" height="30" rx="6" fill="#fff" stroke="#d9bfa5"/>
+          <text x="36" y="68" font-size="12">run(options) &middot; the only small interface</text>
+          <rect x="24" y="88" width="88" height="105" rx="6" fill="#fff" stroke="#d9bfa5"/>
+          <text x="34" y="110" font-size="11">walk</text><text x="34" y="128" font-size="11">+ symlinks</text><text x="34" y="146" font-size="11">+ limits</text>
+          <rect x="120" y="88" width="88" height="105" rx="6" fill="#fff" stroke="#d9bfa5"/>
+          <text x="130" y="110" font-size="11">7 surface</text><text x="130" y="128" font-size="11">parsers in</text><text x="130" y="146" font-size="11">one chain</text>
+          <rect x="216" y="88" width="88" height="105" rx="6" fill="#fff" stroke="#d9bfa5"/>
+          <text x="226" y="110" font-size="11">join</text><text x="226" y="128" font-size="11">+ verdicts</text><text x="226" y="146" font-size="11">+ typos</text>
+          <rect x="312" y="88" width="84" height="105" rx="6" fill="#fff" stroke="#d9bfa5"/>
+          <text x="322" y="110" font-size="11">3 renderers</text><text x="322" y="128" font-size="11">text / json</text><text x="322" y="146" font-size="11">/ sarif</text>
+          <text x="24" y="212" font-size="11" fill="#8a6d52">One seam, no internal seams, everything coupled by file proximity.</text>
+        </svg>
+      </div>
+      <div class="panel">
+        <h4>After</h4>
+        <svg viewBox="0 0 420 230" role="img" aria-label="Seven modules with clear seams">
+          <rect x="10" y="10" width="400" height="42" rx="10" fill="#e8f4ee" stroke="#9fc9b5"/>
+          <text x="24" y="36" font-size="12" font-family="ui-monospace,monospace">core.py facade &middot; frozen interface</text>
+          <rect x="10" y="62" width="400" height="34" rx="8" fill="#f2f7fb" stroke="#b9cbd9"/>
+          <text x="24" y="84" font-size="12" font-family="ui-monospace,monospace">scan.run(options) &middot; composition root</text>
+          <g font-size="11" font-family="ui-monospace,monospace">
+            <rect x="10" y="106" width="94" height="52" rx="8" fill="#fff" stroke="#b9cbd9"/><text x="20" y="128">walk.py</text><text x="20" y="146" font-size="10">trust boundary</text>
+            <rect x="112" y="106" width="94" height="52" rx="8" fill="#fff" stroke="#b9cbd9"/><text x="122" y="128">surfaces.py</text><text x="122" y="146" font-size="10">7 parsers</text>
+            <rect x="214" y="106" width="94" height="52" rx="8" fill="#fff" stroke="#b9cbd9"/><text x="224" y="128">analyze.py</text><text x="224" y="146" font-size="10">the join</text>
+            <rect x="316" y="106" width="94" height="52" rx="8" fill="#fff" stroke="#b9cbd9"/><text x="326" y="128">render.py</text><text x="326" y="146" font-size="10">3 adapters</text>
+            <rect x="10" y="168" width="196" height="46" rx="8" fill="#fff" stroke="#b9cbd9"/><text x="20" y="190">keys.py</text><text x="20" y="206" font-size="10">normalize + distance</text>
+            <rect x="214" y="168" width="196" height="46" rx="8" fill="#fff" stroke="#b9cbd9"/><text x="224" y="190">model.py</text><text x="224" y="206" font-size="10">immutable ScanResult</text>
+          </g>
+        </svg>
+      </div>
+    </div>
+
+    <div class="labels">
+      <span>module</span><span>interface</span><span>depth</span><span>seam</span>
+      <span>adapter</span><span>leverage</span><span>locality</span>
+    </div>
+    <div class="note"><strong>Deletion test.</strong> Delete <code>surfaces.py</code> and parsing complexity does not vanish; it reappears across every caller. The module earns its keep. Delete <code>core.py</code>'s facade and only re-exports vanish, which is why it stays thin on purpose.</div>
+  </div>
+
+  <h2>Candidates not built</h2>
+  <div class="card">
+    <span class="badge spec">Speculative &middot; not implemented</span>
+    <h3 style="margin-top:12px">Replace the surface if/elif chain with an adapter registry</h3>
+    <p>A <code>SurfaceAdapter</code> interface with one method per parser would let a contributor add a language without touching <code>_extract</code>. Today there is one parser chain and one consumer, so the seam would have exactly one adapter. Per the codebase-design vocabulary, one adapter means a hypothetical seam. Adding it now would be YAGNI. Revisit when a second extraction path exists.</p>
+    <div class="callout"><strong>Why it is listed.</strong> This is the obvious next deepening, but it is not work we did. The refactor moved <code>_extract</code> verbatim into <code>surfaces.py</code>; claiming a registry was built would be false.</div>
+  </div>
+  <div class="card">
+    <span class="badge spec">Speculative &middot; not implemented</span>
+    <h3 style="margin-top:12px">Swap regex source matching for a compiled DFA</h3>
+    <p>Twelve compiled linear patterns over bounded lines are cheap and have no nested quantifiers. A DFA would add a large implementation behind an interface that already has depth. No measured bottleneck justifies it.</p>
+  </div>
+
+  <h2>Top recommendation</h2>
+  <div class="card">
+    <p>The implemented split comes first because it removed the only real friction: a reader could not find the code that owned a decision. It also created the seam that makes the other two candidates possible later. Neither speculative candidate changes the report schema, so both remain open without blocking a release.</p>
+  </div>
+
+  <h2>Behavior freeze</h2>
+  <div class="card">
+    <p><code>scripts/deepen.py</code> reads the v1 source, extracts every top-level node with <code>ast</code>, and writes each function body verbatim into its owning module. <code>core.py</code> then re-exports the same names. Six frozen cases cover exit code, stdout bytes, stdout length and stderr. A mutation test proves the oracle detects a changed key.</p>
+    <table>
+      <thead><tr><th>Case</th><th>Bytes</th><th>SHA-256 prefix</th><th>After refactor</th></tr></thead>
+      <tbody>
+        <tr><td>text</td><td>1766</td><td><code>cd3a51221396</code></td><td>identical</td></tr>
+        <tr><td>json</td><td>5664</td><td><code>85effb43369f</code></td><td>identical</td></tr>
+        <tr><td>sarif</td><td>7646</td><td><code>45369bcd027d</code></td><td>identical</td></tr>
+        <tr><td>json_fail_none</td><td>5664</td><td><code>85effb43369f</code></td><td>identical</td></tr>
+        <tr><td>json_exact</td><td>6381</td><td><code>046186cb5791</code></td><td>identical</td></tr>
+        <tr><td>text_show_ok</td><td>1804</td><td><code>7e450379c1c3</code></td><td>identical</td></tr>
+      </tbody>
+    </table>
+    <div class="note"><strong>Round 8 evidence.</strong> Two refactor defects surfaced and were fixed before acceptance: the first splitter dropped <code>@dataclass</code> decorators (<code>TypeError: Options() takes no arguments</code>), the second omitted <code>MAX_KEY_LEN</code> from <code>surfaces.py</code> (<code>NameError</code>). Both were caught by running the gates, not by reading the code.</div>
+  </div>
+
+  <footer>Generated for ghostkey 1.0.0. Self-contained: no CDN, no network, no scripts. Domain terms come from <code>GLOSSARY.md</code>; ADR 0001 is not reopened.</footer>
+</main>
+</body>
+</html>

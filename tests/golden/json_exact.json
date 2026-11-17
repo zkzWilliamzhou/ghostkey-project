@@ -1,0 +1,8 @@
+{
+  "case": "json_exact",
+  "exit_code": 1,
+  "files_created": [],
+  "stderr_exact": "",
+  "stdout_bytes": 6381,
+  "stdout_sha256": "046186cb57919831c1c8464e85a68190fb32960eb7af44b887b79b6e9f3a9461"
+}

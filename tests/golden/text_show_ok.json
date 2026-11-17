@@ -1,0 +1,8 @@
+{
+  "case": "text_show_ok",
+  "exit_code": 1,
+  "files_created": [],
+  "stderr_exact": "",
+  "stdout_bytes": 1804,
+  "stdout_sha256": "7e450379c1c3794b75b3016cffeba4a4fbc95c29d9b48d2307668ac6e4f490bd"
+}
